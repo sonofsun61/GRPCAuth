@@ -5,5 +5,5 @@ type UserRegisterRequest struct {
 	Name        string
 	Surname     string
 	PhoneNumber string
-	Passeord    string
+	Password    string
 }
