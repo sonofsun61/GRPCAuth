@@ -11,10 +11,12 @@ type Config struct {
 }
 
 func MustLoadConfig() *Config {
-	if err := godotenv.Load(); err != nil {
-		panic("Could not load .env file")
+	_ = godotenv.Load()
+	connString := os.Getenv("DATABASE_URL")
+	if connString == "" {
+		panic("DATABASE_URL is not set")
 	}
 	return &Config{
-		ConnString: os.Getenv("DATABASE_URL"),
+		ConnString: connString,
 	}
 }
