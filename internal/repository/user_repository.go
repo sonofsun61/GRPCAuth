@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -41,3 +42,20 @@ func (r *UserRepository) CreateUser(ctx context.Context, user entity.User) (uuid
 	return newUserID, nil
 }
 
+func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (entity.User, error) {
+	query := `
+			select id, email, name, surname, phone_number, 
+				password_hash, password_salt, created_at
+			from users
+			where email = $1
+	`
+	rows, err := r.pool.Query(ctx, query, email)
+	if err != nil {
+		return entity.User{}, fmt.Errorf("failed to get user by email: %w", err)
+	}
+	userInfo, err := pgx.CollectExactlyOneRow(rows, pgx.RowToStructByName[entity.User])
+	if err != nil {
+		return entity.User{}, fmt.Errorf("failed to place user data into struct: %w", err)
+	}
+	return userInfo, nil
+}
