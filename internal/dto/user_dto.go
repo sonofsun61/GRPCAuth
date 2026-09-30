@@ -7,3 +7,8 @@ type UserRegisterRequest struct {
 	PhoneNumber string
 	Password    string
 }
+
+type UserLoginRequest struct {
+	Email        string `db:"email"`
+	Password string `db:"password_hash"`
+}
