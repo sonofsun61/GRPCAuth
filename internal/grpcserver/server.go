@@ -12,6 +12,7 @@ import (
 
 type AuthService interface {
 	Register(ctx context.Context, newUserData dto.UserRegisterRequest) (string, error)
+	Login(ctx context.Context, req dto.UserLoginRequest) (string, error)
 }
 
 type Server struct {
@@ -42,7 +43,16 @@ func (s *Server) Register(ctx context.Context, req *authpb.RegisterRequest) (*au
 }
 
 func (s *Server) Login(ctx context.Context, req *authpb.LoginRequest) (*authpb.LoginResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "not implemented")
+	loginRequest := dto.UserLoginRequest{
+		Email: req.Login,
+		Password: req.Password,
+	}
+	token, err := s.authService.Login(ctx, loginRequest)
+	if err != nil {
+		log.Printf("register error: %v", err)
+		return &authpb.LoginResponse{}, status.Error(codes.Internal, "failed to login")
+	}
+	return &authpb.LoginResponse{Token: token}, nil
 }
 
 func (s *Server) ChangePassword(ctx context.Context, req *authpb.ChangePasswordRequest) (*authpb.ChangePasswordResponse, error) {
