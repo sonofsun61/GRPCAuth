@@ -13,6 +13,7 @@ import (
 
 type UserRepository interface {
 	CreateUser(ctx context.Context, user entity.User) (uuid.UUID, error)
+	GetUserByEmail(ctx context.Context, email string) (entity.User, error)
 }
 
 type AuthService struct {
@@ -54,6 +55,22 @@ func (s *AuthService) Register(ctx context.Context, newUserData dto.UserRegister
 		return "", err
 	}
 	token, err := jwtutil.GenerateToken(id, s.jwtSecret)
+	if err != nil {
+		return "", err
+	}
+	return token, nil
+}
+
+func (s *AuthService) Login(ctx context.Context, req dto.UserLoginRequest) (string, error) {
+	userInfo, err := s.repo.GetUserByEmail(ctx, req.Email)
+	if err != nil {
+		return "", errors.New("invalid email or password")
+	}
+	err = hasher.ComparePassword(userInfo.PasswordHash, req.Password, userInfo.PasswordSalt)
+	if err != nil {
+		return "", errors.New("invalid email or password")
+	}
+	token, err := jwtutil.GenerateToken(userInfo.ID, s.jwtSecret)
 	if err != nil {
 		return "", err
 	}
