@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -19,7 +19,7 @@ func NewUserRepository(pool *pgxpool.Pool) *UserRepository {
 	}
 }
 
-func (r *UserRepository) CreateUser(ctx context.Context, user entity.User) error {
+func (r *UserRepository) CreateUser(ctx context.Context, user entity.User) (uuid.UUID, error) {
 	query := `
 			insert into users (
 				email, 
@@ -28,16 +28,16 @@ func (r *UserRepository) CreateUser(ctx context.Context, user entity.User) error
 				phone_number, 
 				password_hash, 
 				password_salt)
-			values ($1, $2, $3, $4, $5, $6)`
-	tag, err := r.pool.Exec(ctx, query, 
-		user.Email, user.Name, 
-		user.Surname, user.PhoneNumber, 
-		user.PasswordHash, user.PasswordSalt)
+			values ($1, $2, $3, $4, $5, $6)
+			returning id`
+	var newUserID uuid.UUID
+	err := r.pool.QueryRow(ctx, query,
+		user.Email, user.Name,
+		user.Surname, user.PhoneNumber,
+		user.PasswordHash, user.PasswordSalt).Scan(&newUserID)
 	if err != nil {
-		return fmt.Errorf("failed to insert new user information: %w", err)
+		return uuid.Nil, fmt.Errorf("failed to insert new user information: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
-		return pgx.ErrNoRows
-	}
-	return nil
+	return newUserID, nil
 }
+
