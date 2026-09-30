@@ -27,7 +27,7 @@ func NewApp() *App {
 	pool := database.MustConnectToDatabase(context.Background(), cfg.ConnString)
 
 	repo := repository.NewUserRepository(pool)
-	authService := service.NewAuthService(repo)
+	authService := service.NewAuthService(repo, cfg.JWTSecret)
 	authServer := grpcserver.NewServer(authService)
 
 	grpcServer := grpc.NewServer()
