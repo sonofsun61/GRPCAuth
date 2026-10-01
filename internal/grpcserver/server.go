@@ -14,6 +14,7 @@ type AuthService interface {
 	Register(ctx context.Context, newUserData dto.UserRegisterRequest) (string, error)
 	Login(ctx context.Context, req dto.UserLoginRequest) (string, error)
 	ChangePassword(ctx context.Context, req dto.UserChangePasswordRequest) error
+	ResetPassword(ctx context.Context, req dto.UserResetPasswordRequest) error
 }
 
 type Server struct {
@@ -70,5 +71,12 @@ func (s *Server) ChangePassword(ctx context.Context, req *authpb.ChangePasswordR
 }
 
 func (s *Server) ResetPassword(ctx context.Context, req *authpb.ResetPasswordRequest) (*authpb.ResetPasswordResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "not implemented")
+	resetPasswordRequest := dto.UserResetPasswordRequest{
+		Email: req.Email,
+	}
+	if err := s.authService.ResetPassword(ctx, resetPasswordRequest); err != nil {
+		log.Printf("reset password error: %v", err)
+		return nil, status.Error(codes.Internal, "failed to reset password")
+	}
+	return &authpb.ResetPasswordResponse{}, nil
 }
