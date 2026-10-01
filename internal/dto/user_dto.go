@@ -9,6 +9,12 @@ type UserRegisterRequest struct {
 }
 
 type UserLoginRequest struct {
-	Email        string `db:"email"`
+	Email    string `db:"email"`
 	Password string `db:"password_hash"`
+}
+
+type UserChangePasswordRequest struct {
+	Email string 
+	OldPassword string
+	NewPassword string
 }
