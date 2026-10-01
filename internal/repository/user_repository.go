@@ -59,3 +59,15 @@ func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (enti
 	}
 	return userInfo, nil
 }
+
+func (r *UserRepository) UpdatePassword(ctx context.Context, email, newPasswordHash, newPasswordSalt string) error {
+	query := `update users set password_hash = $1, password_salt = $2 where email = $3`
+	tag, err := r.pool.Exec(ctx, query, newPasswordHash, newPasswordSalt, email)
+	if err != nil {
+		return fmt.Errorf("failed to update user's password: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	return nil
+}
