@@ -7,6 +7,7 @@ import (
 	"authservice/internal/jwtutil"
 	"context"
 	"errors"
+	"log"
 
 	"github.com/google/uuid"
 )
@@ -14,6 +15,7 @@ import (
 type UserRepository interface {
 	CreateUser(ctx context.Context, user entity.User) (uuid.UUID, error)
 	GetUserByEmail(ctx context.Context, email string) (entity.User, error)
+	UpdatePassword(ctx context.Context, email, newPasswordHash, newPasswordSalt string) error
 }
 
 type AuthService struct {
@@ -75,4 +77,28 @@ func (s *AuthService) Login(ctx context.Context, req dto.UserLoginRequest) (stri
 		return "", err
 	}
 	return token, nil
+}
+
+func (s *AuthService) ChangePassword(ctx context.Context, req dto.UserChangePasswordRequest) error {
+	userInfo, err := s.repo.GetUserByEmail(ctx, req.Email)
+	if err != nil {
+		log.Printf("change password: GetUserByEmail failed: %v", err)
+		return errors.New("invalid email or password")
+	}
+	err = hasher.ComparePassword(userInfo.PasswordHash, req.OldPassword, userInfo.PasswordSalt)
+	if err != nil {
+		return errors.New("invalid email or password")
+	}
+	newSalt, err := hasher.GenerateSalt()
+	if err != nil {
+		return err
+	}
+	newPassword, err := hasher.HashPassword(req.NewPassword, newSalt)
+	if err != nil {
+		return err
+	}
+	if err := s.repo.UpdatePassword(ctx, req.Email, newPassword, newSalt); err != nil {
+		return err
+	}
+	return nil
 }
