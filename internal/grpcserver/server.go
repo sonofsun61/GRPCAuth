@@ -6,6 +6,7 @@ import (
 	"context"
 	"log"
 
+	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -15,6 +16,7 @@ type AuthService interface {
 	Login(ctx context.Context, req dto.UserLoginRequest) (string, error)
 	ChangePassword(ctx context.Context, req dto.UserChangePasswordRequest) error
 	ResetPassword(ctx context.Context, req dto.UserResetPasswordRequest) error
+	ValidateToken(ctx context.Context, token string) (uuid.UUID, error)
 }
 
 type Server struct {
@@ -79,4 +81,13 @@ func (s *Server) ResetPassword(ctx context.Context, req *authpb.ResetPasswordReq
 		return nil, status.Error(codes.Internal, "failed to reset password")
 	}
 	return &authpb.ResetPasswordResponse{}, nil
+}
+
+func (s *Server) ValidateToken(ctx context.Context, req *authpb.ValidateTokenRequest) (*authpb.ValidateTokenResponse, error) {
+	userID, err := s.authService.ValidateToken(ctx, req.Token)
+	if err != nil {
+		log.Printf("validate token error: %v", err)
+		return &authpb.ValidateTokenResponse{Valid: false}, nil
+	}
+	return &authpb.ValidateTokenResponse{Valid: true, UserId: userID.String()}, nil
 }
