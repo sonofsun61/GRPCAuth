@@ -5,6 +5,7 @@ import (
 	"authservice/internal/entity"
 	"authservice/internal/hasher"
 	"authservice/internal/jwtutil"
+	"authservice/internal/randstring"
 	"context"
 	"errors"
 	"log"
@@ -100,5 +101,30 @@ func (s *AuthService) ChangePassword(ctx context.Context, req dto.UserChangePass
 	if err := s.repo.UpdatePassword(ctx, req.Email, newPassword, newSalt); err != nil {
 		return err
 	}
+	return nil
+}
+
+func (s *AuthService) ResetPassword(ctx context.Context, req dto.UserResetPasswordRequest) error {
+	_, err := s.repo.GetUserByEmail(ctx, req.Email)
+	if err != nil {
+		log.Printf("reset password: GetUserByEmail failed: %v", err)
+		return nil
+	}
+	newPassword, err := randstring.GenerateRandomPassword(12)
+	if err != nil {
+		return err
+	}
+	salt, err := hasher.GenerateSalt()
+	if err != nil {
+		return err
+	}
+	hashPassword, err := hasher.HashPassword(newPassword, salt)
+	if err != nil {
+		return err
+	}
+	if err := s.repo.UpdatePassword(ctx, req.Email, hashPassword, salt); err != nil {
+		return err
+	}
+	log.Printf("Password reset: new password is %s", newPassword)
 	return nil
 }
