@@ -128,3 +128,7 @@ func (s *AuthService) ResetPassword(ctx context.Context, req dto.UserResetPasswo
 	log.Printf("Password reset: new password is %s", newPassword)
 	return nil
 }
+
+func (s *AuthService) ValidateToken(ctx context.Context, token string) (uuid.UUID, error) {
+	return jwtutil.ValidateToken(token, s.jwtSecret)
+}
