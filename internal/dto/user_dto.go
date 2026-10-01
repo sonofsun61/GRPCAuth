@@ -14,7 +14,11 @@ type UserLoginRequest struct {
 }
 
 type UserChangePasswordRequest struct {
-	Email string 
+	Email       string
 	OldPassword string
 	NewPassword string
+}
+
+type UserResetPasswordRequest struct {
+	Email string
 }
