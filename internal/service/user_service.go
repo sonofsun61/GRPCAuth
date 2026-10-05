@@ -13,6 +13,8 @@ import (
 	"github.com/google/uuid"
 )
 
+type JWTSecret string
+
 type UserRepository interface {
 	CreateUser(ctx context.Context, user entity.User) (uuid.UUID, error)
 	GetUserByEmail(ctx context.Context, email string) (entity.User, error)
@@ -24,10 +26,10 @@ type AuthService struct {
 	jwtSecret string
 }
 
-func NewAuthService(repo UserRepository, jwtSecret string) *AuthService {
+func NewAuthService(repo UserRepository, jwtSecret JWTSecret) *AuthService {
 	return &AuthService{
 		repo:      repo,
-		jwtSecret: jwtSecret,
+		jwtSecret: string(jwtSecret),
 	}
 }
 
