@@ -1,10 +1,11 @@
 package grpcserver
 
 import (
-	"authservice/gen/authpb"
 	"authservice/internal/dto"
 	"context"
 	"log"
+
+	"github.com/sonofsun61/AuthContract/gen/authpb"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"

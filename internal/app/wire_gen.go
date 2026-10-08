@@ -7,14 +7,15 @@
 package app
 
 import (
-	"authservice/gen/authpb"
 	"authservice/internal/config"
 	"authservice/internal/database"
 	"authservice/internal/grpcserver"
 	"authservice/internal/repository"
 	"authservice/internal/service"
 	"context"
+
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/sonofsun61/AuthContract/gen/authpb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
