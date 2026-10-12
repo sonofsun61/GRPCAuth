@@ -2,7 +2,6 @@ package hasher_test
 
 import (
 	"authservice/internal/hasher"
-	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,7 +12,7 @@ func TestGenerateSalt_Format(t *testing.T) {
 	salt, err := hasher.GenerateSalt()
 	require.NoError(t, err)
 	assert.Len(t, salt, 32)
-	assert.Regexp(t, regexp.MustCompile(string(salt)), string(salt))
+	assert.Regexp(t, "^[0-9a-f]{32}$", string(salt))
 }
 
 func TestGenerateSalt_IsUnique(t *testing.T) {
