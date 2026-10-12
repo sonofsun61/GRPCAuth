@@ -2,6 +2,7 @@ package hasher_test
 
 import (
 	"authservice/internal/hasher"
+	"authservice/internal/randstring"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -21,4 +22,18 @@ func TestGenerateSalt_IsUnique(t *testing.T) {
 	salt2, err := hasher.GenerateSalt()
 	require.NoError(t, err)
 	assert.NotEqual(t, salt1, salt2)
+}
+
+func TestHashPassword(t *testing.T) {
+	password, err := randstring.GenerateRandomPassword(20)
+	require.NoError(t, err)
+	salt, err := hasher.GenerateSalt()
+	require.NoError(t, err)
+	hash, err := hasher.HashPassword(password, salt)
+	require.NoError(t, err)
+	require.NotEqual(t, hash, password+salt)
+	assert.Regexp(t, `^\$2`, hash)
+	hash2, err := hasher.HashPassword(password, salt)
+	require.NoError(t, err)
+	require.NotEqual(t, hash, hash2)
 }
