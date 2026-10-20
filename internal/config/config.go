@@ -23,6 +23,6 @@ func MustLoadConfig() *Config {
 	}
 	return &Config{
 		ConnString: connString,
-		JWTSecret: jwtSecret,
+		JWTSecret:  jwtSecret,
 	}
 }

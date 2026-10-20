@@ -39,11 +39,11 @@ func TestValidateToken_Expired(t *testing.T) {
 	userID := uuid.New()
 	claims := jwt.MapClaims{
 		"user_id": userID,
-		"exp":     time.Date(2005, time.October, 7, 11, 37, 15, 1, time.Local),
+		"exp":     time.Date(2005, time.October, 7, 11, 37, 15, 1, time.Local).Unix(),
 	}
 	signedToken := signToken(t, claims, testSecret)
 	gotID, err := jwtutil.ValidateToken(signedToken, testSecret)
-	require.ErrorIs(t, err, jwt.ErrTokenInvalidClaims)
+	require.ErrorIs(t, err, jwt.ErrTokenExpired)
 	assert.Equal(t, uuid.Nil, gotID)
 }
 
@@ -91,6 +91,10 @@ func TestValidateToken_InvalidClaims(t *testing.T) {
 			"user_id": "not-a-uuid",
 			"exp":     time.Now().Add(24 * time.Hour).Unix(),
 		}},
+		{"user_id is empty", jwt.MapClaims{
+			"user_id": "",
+			"exp":     time.Now().Add(24 * time.Hour).Unix(),
+		}},
 	}
 
 	for _, tt := range tests {
@@ -122,7 +126,7 @@ func TestValidateToken_UnexpectedAlgorithm(t *testing.T) {
 			token, err := jwt.NewWithClaims(tt.method, claims).SignedString(tt.key)
 			require.NoError(t, err)
 			userID, err := jwtutil.ValidateToken(token, testSecret)
-			require.Error(t, err)
+			require.ErrorIs(t, err, jwt.ErrTokenSignatureInvalid)
 			assert.Equal(t, uuid.Nil, userID)
 		})
 	}
@@ -144,11 +148,11 @@ func TestGenerateToken_Claims(t *testing.T) {
 	require.NoError(t, err)
 	token, err := jwt.Parse(tokenStr, func(tt *jwt.Token) (interface{}, error) {
 		if _, ok := tt.Method.(*jwt.SigningMethodHMAC); !ok {
-			require.NoError(t, err)
 			return nil, fmt.Errorf("unexpected signing method: %v", tt.Header["alg"])
 		}
 		return []byte(testSecret), nil
 	}, jwt.WithValidMethods([]string{"HS256"}))
+	require.NoError(t, err)
 	claims, ok := token.Claims.(jwt.MapClaims)
 	require.True(t, ok)
 	require.Equal(t, userID.String(), claims["user_id"])
