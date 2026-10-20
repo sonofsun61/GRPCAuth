@@ -9,6 +9,8 @@ import (
 	"github.com/google/uuid"
 )
 
+var ErrInvalidClaims = errors.New("invalid token claims")
+
 func GenerateToken(userID uuid.UUID, secret string) (string, error) {
 	claims := jwt.MapClaims{
 		"user_id": userID.String(),
@@ -23,12 +25,12 @@ func GenerateToken(userID uuid.UUID, secret string) (string, error) {
 }
 
 func ValidateToken(tokenStr string, secret string) (uuid.UUID, error) {
-	token, err := jwt.Parse(tokenStr, func (t *jwt.Token) (interface{}, error) {
+	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
 		return []byte(secret), nil
-	})
+	}, jwt.WithValidMethods([]string{"HS256"}), jwt.WithExpirationRequired())
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -37,15 +39,15 @@ func ValidateToken(tokenStr string, secret string) (uuid.UUID, error) {
 	}
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		return uuid.Nil, errors.New("invalid token claims")
+		return uuid.Nil, ErrInvalidClaims
 	}
 	userIDStr, ok := claims["user_id"].(string)
 	if !ok {
-		return uuid.Nil, errors.New("invalid token claims")
+		return uuid.Nil, ErrInvalidClaims
 	}
 	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("invalid user id in token: %w", err)
+		return uuid.Nil, fmt.Errorf("%w: invalid user id: %v", ErrInvalidClaims, err)
 	}
 	return userID, nil
 }

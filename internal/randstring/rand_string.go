@@ -3,15 +3,17 @@ package randstring
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"fmt"
+	"errors"
 )
 
+var ErrInvalidLength error = errors.New("lenght must be more than 0")
+
 func GenerateRandomPassword(lenght int) (string, error) {
-	newPassword := make([]byte, lenght)
-	_, err := rand.Read(newPassword)
-	if err != nil {
-		return "", fmt.Errorf("failed to generate new password: %w", err)
+	if lenght <= 0 {
+		return "", ErrInvalidLength
 	}
+	newPassword := make([]byte, lenght)
+	_, _ = rand.Read(newPassword)
 	newPasswordStr := hex.EncodeToString(newPassword)
 	return newPasswordStr, nil
 }
