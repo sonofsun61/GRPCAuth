@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type mockUserRepo struct {
@@ -253,5 +254,59 @@ func TestChangePassword_Success(t *testing.T) {
 	require.NoError(t, hasher.ComparePassword(gotHash, newPassword, gotSalt))
 	require.Error(t, hasher.ComparePassword(gotHash, oldPassword, gotSalt))
 	require.NotEqual(t, gotSalt, user.PasswordSalt)
+	repo.AssertExpectations(t)
+}
+
+func TestResetPassword_UserNotFound(t *testing.T) {
+	repo := new(mockUserRepo)
+	password := "password"
+	user := newStoreUser(t, password)
+	repo.On("GetUserByEmail", mock.Anything, user.Email).Return(entity.User{}, errUserNotFound)
+	req := dto.UserResetPasswordRequest{
+		Email: user.Email,
+	}
+	svc := service.NewAuthService(repo, testSecret)
+	err := svc.ResetPassword(context.Background(), req)
+	require.NoError(t, err)
+	repo.AssertNotCalled(t, "UpdatePassword", mock.Anything, req.Email, mock.Anything, mock.Anything)
+}
+
+func TestResetPassword_UpdateError(t *testing.T) {
+	repo := new(mockUserRepo)
+	password := "password"
+	user := newStoreUser(t, password)
+	repo.On("GetUserByEmail", mock.Anything, user.Email).Return(user, nil)
+	repo.On("UpdatePassword", mock.Anything, user.Email, mock.Anything, mock.Anything).Return(errDBDown)
+	req := dto.UserResetPasswordRequest{
+		Email: user.Email,
+	}
+	svc := service.NewAuthService(repo, testSecret)
+	err := svc.ResetPassword(context.Background(), req)
+	require.ErrorIs(t, err, errDBDown)
+	repo.AssertExpectations(t)
+}
+
+func TestResetPassword_Success(t *testing.T) {
+	repo := new(mockUserRepo)
+	password := "password"
+	user := newStoreUser(t, password)
+	repo.On("GetUserByEmail", mock.Anything, user.Email).Return(user, nil)
+	var gotHash, gotSalt string
+	repo.On("UpdatePassword", mock.Anything, user.Email, mock.Anything, mock.Anything).
+		Return(nil).
+		Run(func(args mock.Arguments) {
+			gotHash = args.String(2)
+			gotSalt = args.String(3)
+		})
+	req := dto.UserResetPasswordRequest{
+		Email: user.Email,
+	}
+	svc := service.NewAuthService(repo, testSecret)
+	err := svc.ResetPassword(context.Background(), req)
+	require.NoError(t, err)
+	require.NotEqual(t, gotSalt, user.PasswordSalt)
+	require.NotEqual(t, gotHash, user.PasswordHash)
+	require.ErrorIs(t, hasher.ComparePassword(gotHash, password, gotSalt), bcrypt.ErrMismatchedHashAndPassword)
+	assert.Regexp(t, `^\$2`, gotHash)
 	repo.AssertExpectations(t)
 }
