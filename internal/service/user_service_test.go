@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -38,10 +39,12 @@ func (m *mockUserRepo) UpdatePassword(ctx context.Context, email, newPasswordHas
 }
 
 const (
-	testSecret = "test-secret-bot-for-production"
+	testSecret = "test-secret-for-production"
 )
 
 var errDBDown = errors.New("db down")
+var errInvalidCredentials = errors.New("invalid email or password")
+var errUserNotFound = errors.New("failed to find user")
 
 func validRegisterRequest() dto.UserRegisterRequest {
 	req := dto.UserRegisterRequest{
@@ -112,3 +115,73 @@ func TestRegister_EmptyFields(t *testing.T) {
 		})
 	}
 }
+
+func newStoreUser(t *testing.T, password string) entity.User {
+	t.Helper()
+	salt, err := hasher.GenerateSalt()
+	require.NoError(t, err)
+	hashedPassword, err := hasher.HashPassword(password, salt)
+	require.NoError(t, err)
+	return entity.User{
+		ID:           uuid.New(),
+		Email:        "example@mail.com",
+		Name:         "Name",
+		Surname:      "Surname",
+		PhoneNumber:  "+79999999999",
+		PasswordHash: hashedPassword,
+		PasswordSalt: salt,
+		CreatedAt:    time.Now(),
+	}
+}
+
+func TestLogin_Success(t *testing.T) {
+	repo := new(mockUserRepo)
+	password := "password"
+	user := newStoreUser(t, password)
+	repo.On("GetUserByEmail", mock.Anything, user.Email).Return(user, nil)
+	svc := service.NewAuthService(repo, testSecret)
+	req := dto.UserLoginRequest{
+		Email:    user.Email,
+		Password: password,
+	}
+	token, err := svc.Login(context.Background(), req)
+	require.NoError(t, err)
+	require.NotEmpty(t, token)
+	userID, err := jwtutil.ValidateToken(token, testSecret)
+	require.NoError(t, err)
+	require.Equal(t, user.ID, userID)
+	repo.AssertExpectations(t)
+}
+
+func TestLogin_UserNotFound(t *testing.T) {
+	repo := new(mockUserRepo)
+	password := "password"
+	user := newStoreUser(t, password)
+	repo.On("GetUserByEmail", mock.Anything, user.Email).Return(entity.User{}, errUserNotFound)
+	svc := service.NewAuthService(repo, testSecret)
+	req := dto.UserLoginRequest{
+		Email:    user.Email,
+		Password: password,
+	}
+	token, err := svc.Login(context.Background(), req)
+	require.EqualError(t, err, errInvalidCredentials.Error())
+	assert.Empty(t, token)
+	repo.AssertExpectations(t)
+}
+
+func TestLogin_WrongPassword(t *testing.T) {
+	repo := new(mockUserRepo)
+	password := "password"
+	user := newStoreUser(t, password)
+	repo.On("GetUserByEmail", mock.Anything, user.Email).Return(user, nil)
+	svc := service.NewAuthService(repo, testSecret)
+	req := dto.UserLoginRequest{
+		Email:    user.Email,
+		Password: "random-password",
+	}
+	token, err := svc.Login(context.Background(), req)
+	require.EqualError(t, err, errInvalidCredentials.Error())
+	assert.Empty(t, token)
+	repo.AssertExpectations(t)
+}
+
