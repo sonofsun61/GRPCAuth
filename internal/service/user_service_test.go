@@ -185,3 +185,73 @@ func TestLogin_WrongPassword(t *testing.T) {
 	repo.AssertExpectations(t)
 }
 
+func newChangePasswordRequest(oldPassword, newPassword string) dto.UserChangePasswordRequest {
+	req := dto.UserChangePasswordRequest{
+		Email:       "example@mail.com",
+		OldPassword: oldPassword,
+		NewPassword: newPassword,
+	}
+	return req
+}
+
+func TestChangePassword_UserNotFound(t *testing.T) {
+	repo := new(mockUserRepo)
+	oldPassword := "oldPassword"
+	newPassword := "newPassword"
+	req := newChangePasswordRequest(oldPassword, newPassword)
+	repo.On("GetUserByEmail", mock.Anything, req.Email).Return(entity.User{}, errUserNotFound)
+	svc := service.NewAuthService(repo, testSecret)
+	err := svc.ChangePassword(context.Background(), req)
+	require.EqualError(t, err, errInvalidCredentials.Error())
+	repo.AssertNotCalled(t, "UpdatePassword", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestChangePassword_WrongOldPassword(t *testing.T) {
+	repo := new(mockUserRepo)
+	oldPassword := "oldPassword"
+	newPassword := "newPassword"
+	user := newStoreUser(t, oldPassword)
+	req := newChangePasswordRequest("WrongOldPassword", newPassword)
+	repo.On("GetUserByEmail", mock.Anything, user.Email).Return(user, nil)
+	svc := service.NewAuthService(repo, testSecret)
+	err := svc.ChangePassword(context.Background(), req)
+	require.EqualError(t, err, errInvalidCredentials.Error())
+	repo.AssertNotCalled(t, "UpdatePassword", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestChangePassword_UpdateError(t *testing.T) {
+	repo := new(mockUserRepo)
+	oldPassword := "oldPassword"
+	newPassword := "newPassword"
+	user := newStoreUser(t, oldPassword)
+	req := newChangePasswordRequest(oldPassword, newPassword)
+	repo.On("GetUserByEmail", mock.Anything, user.Email).Return(user, nil)
+	repo.On("UpdatePassword", mock.Anything, user.Email, mock.Anything, mock.Anything).Return(errDBDown)
+	svc := service.NewAuthService(repo, testSecret)
+	err := svc.ChangePassword(context.Background(), req)
+	require.ErrorIs(t, err, errDBDown)
+	repo.AssertExpectations(t)
+}
+
+func TestChangePassword_Success(t *testing.T) {
+	repo := new(mockUserRepo)
+	oldPassword := "oldPassword"
+	newPassword := "newPassword"
+	user := newStoreUser(t, oldPassword)
+	req := newChangePasswordRequest(oldPassword, newPassword)
+	repo.On("GetUserByEmail", mock.Anything, user.Email).Return(user, nil)
+	var gotHash, gotSalt string
+	repo.On("UpdatePassword", mock.Anything, user.Email, mock.Anything, mock.Anything).
+		Return(nil).
+		Run(func(args mock.Arguments) {
+			gotHash = args.String(2)
+			gotSalt = args.String(3)
+		})
+	svc := service.NewAuthService(repo, testSecret)
+	err := svc.ChangePassword(context.Background(), req)
+	require.NoError(t, err)
+	require.NoError(t, hasher.ComparePassword(gotHash, newPassword, gotSalt))
+	require.Error(t, hasher.ComparePassword(gotHash, oldPassword, gotSalt))
+	require.NotEqual(t, gotSalt, user.PasswordSalt)
+	repo.AssertExpectations(t)
+}
