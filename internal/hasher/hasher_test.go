@@ -65,7 +65,7 @@ func TestComparePassword(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			gotErr := hasher.ComparePassword(tt.hash, tt.password, tt.salt)
 			if tt.wantErr != nil {
-				require.Equal(t, tt.wantErr, gotErr)
+				require.ErrorIs(t, gotErr, tt.wantErr)
 			} else {
 				require.NoError(t, gotErr)
 			}
