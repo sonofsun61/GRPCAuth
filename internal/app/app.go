@@ -1,7 +1,8 @@
 package app
 
 import (
-	"log"
+	"fmt"
+	"log/slog"
 	"net"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -11,18 +12,20 @@ import (
 type App struct {
 	pool       *pgxpool.Pool
 	grpcServer *grpc.Server
+	logger     *slog.Logger
 }
 
-func (a *App) Run() {
+func (a *App) Run() error {
 	defer a.pool.Close()
 
 	lis, err := net.Listen("tcp", ":50051")
 	if err != nil {
-		log.Fatalf("failed to open tcp connection: %v", err)
+		return fmt.Errorf("failed to open tcp connection: %w", err)
 	}
 
-	log.Printf("Server started on %s", lis.Addr())
+	a.logger.Info("server started", "addr", lis.Addr().String())
 	if err := a.grpcServer.Serve(lis); err != nil {
-		log.Fatalf("server failed to serve: %v", err)
+		return fmt.Errorf("server failed to serve: %w", err)
 	}
+	return nil
 }

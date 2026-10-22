@@ -10,14 +10,15 @@ import (
 	"authservice/internal/config"
 	"authservice/internal/database"
 	"authservice/internal/grpcserver"
+	"authservice/internal/logger"
 	"authservice/internal/repository"
 	"authservice/internal/service"
 	"context"
-
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sonofsun61/AuthContract/gen/authpb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
+	"log/slog"
 )
 
 // Injectors from wire.go:
@@ -29,10 +30,11 @@ func InitializeApp() *App {
 	pool := database.MustConnectToDatabase(context, connString)
 	userRepository := repository.NewUserRepository(pool)
 	jwtSecret := ProvideJWTSecret(configConfig)
-	authService := service.NewAuthService(userRepository, jwtSecret)
-	server := grpcserver.NewServer(authService)
+	slogLogger := logger.NewLogger()
+	authService := service.NewAuthService(userRepository, jwtSecret, slogLogger)
+	server := grpcserver.NewServer(authService, slogLogger)
 	grpcServer := ProvideGRPCServer(server)
-	app := ProvideApp(pool, grpcServer)
+	app := ProvideApp(pool, grpcServer, slogLogger)
 	return app
 }
 
@@ -57,9 +59,10 @@ func ProvideGRPCServer(authServer *grpcserver.Server) *grpc.Server {
 	return grpcServer
 }
 
-func ProvideApp(pool *pgxpool.Pool, grpcServer *grpc.Server) *App {
+func ProvideApp(pool *pgxpool.Pool, grpcServer *grpc.Server, logger2 *slog.Logger) *App {
 	return &App{
 		pool:       pool,
 		grpcServer: grpcServer,
+		logger:     logger2,
 	}
 }

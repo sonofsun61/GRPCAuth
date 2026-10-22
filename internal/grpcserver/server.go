@@ -3,7 +3,7 @@ package grpcserver
 import (
 	"authservice/internal/dto"
 	"context"
-	"log"
+	"log/slog"
 
 	"github.com/sonofsun61/AuthContract/gen/authpb"
 
@@ -23,11 +23,13 @@ type AuthService interface {
 type Server struct {
 	authpb.UnimplementedAuthServiceServer
 	authService AuthService
+	logger      *slog.Logger
 }
 
-func NewServer(authService AuthService) *Server {
+func NewServer(authService AuthService, logger *slog.Logger) *Server {
 	return &Server{
 		authService: authService,
+		logger:      logger,
 	}
 }
 
@@ -41,7 +43,7 @@ func (s *Server) Register(ctx context.Context, req *authpb.RegisterRequest) (*au
 	}
 	token, err := s.authService.Register(ctx, newUserData)
 	if err != nil {
-		log.Printf("register error: %v", err)
+		s.logger.Error("register failed", "err", err)
 		return nil, status.Error(codes.Internal, "failed to register user")
 	}
 	return &authpb.RegisterResponse{Token: token}, nil
@@ -54,7 +56,7 @@ func (s *Server) Login(ctx context.Context, req *authpb.LoginRequest) (*authpb.L
 	}
 	token, err := s.authService.Login(ctx, loginRequest)
 	if err != nil {
-		log.Printf("login error: %v", err)
+		s.logger.Warn("login failed", "err", err)
 		return nil, status.Error(codes.Unauthenticated, "failed to login")
 	}
 	return &authpb.LoginResponse{Token: token}, nil
@@ -67,7 +69,7 @@ func (s *Server) ChangePassword(ctx context.Context, req *authpb.ChangePasswordR
 		NewPassword: req.NewPassword,
 	}
 	if err := s.authService.ChangePassword(ctx, changePasswordRequest); err != nil {
-		log.Printf("change password error: %v", err)
+		s.logger.Warn("change password failed", "err", err)
 		return nil, status.Error(codes.Unauthenticated, "failed to update password")
 	}
 	return &authpb.ChangePasswordResponse{}, nil
@@ -78,7 +80,7 @@ func (s *Server) ResetPassword(ctx context.Context, req *authpb.ResetPasswordReq
 		Email: req.Email,
 	}
 	if err := s.authService.ResetPassword(ctx, resetPasswordRequest); err != nil {
-		log.Printf("reset password error: %v", err)
+		s.logger.Error("reset password failed", "err", err)
 		return nil, status.Error(codes.Internal, "failed to reset password")
 	}
 	return &authpb.ResetPasswordResponse{}, nil
@@ -87,7 +89,7 @@ func (s *Server) ResetPassword(ctx context.Context, req *authpb.ResetPasswordReq
 func (s *Server) ValidateToken(ctx context.Context, req *authpb.ValidateTokenRequest) (*authpb.ValidateTokenResponse, error) {
 	userID, err := s.authService.ValidateToken(ctx, req.Token)
 	if err != nil {
-		log.Printf("validate token error: %v", err)
+		s.logger.Info("token validation failed", "err", err)
 		return &authpb.ValidateTokenResponse{Valid: false}, nil
 	}
 	return &authpb.ValidateTokenResponse{Valid: true, UserId: userID.String()}, nil

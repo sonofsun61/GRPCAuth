@@ -8,7 +8,7 @@ import (
 	"authservice/internal/randstring"
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 
 	"github.com/google/uuid"
 )
@@ -24,12 +24,14 @@ type UserRepository interface {
 type AuthService struct {
 	repo      UserRepository
 	jwtSecret string
+	logger    *slog.Logger
 }
 
-func NewAuthService(repo UserRepository, jwtSecret JWTSecret) *AuthService {
+func NewAuthService(repo UserRepository, jwtSecret JWTSecret, logger *slog.Logger) *AuthService {
 	return &AuthService{
 		repo:      repo,
 		jwtSecret: string(jwtSecret),
+		logger:    logger,
 	}
 }
 
@@ -85,7 +87,7 @@ func (s *AuthService) Login(ctx context.Context, req dto.UserLoginRequest) (stri
 func (s *AuthService) ChangePassword(ctx context.Context, req dto.UserChangePasswordRequest) error {
 	userInfo, err := s.repo.GetUserByEmail(ctx, req.Email)
 	if err != nil {
-		log.Printf("change password: GetUserByEmail failed: %v", err)
+		s.logger.Warn("change password: user lookup failed", "email", req.Email, "err", err)
 		return errors.New("invalid email or password")
 	}
 	err = hasher.ComparePassword(userInfo.PasswordHash, req.OldPassword, userInfo.PasswordSalt)
@@ -109,7 +111,7 @@ func (s *AuthService) ChangePassword(ctx context.Context, req dto.UserChangePass
 func (s *AuthService) ResetPassword(ctx context.Context, req dto.UserResetPasswordRequest) error {
 	_, err := s.repo.GetUserByEmail(ctx, req.Email)
 	if err != nil {
-		log.Printf("reset password: GetUserByEmail failed: %v", err)
+		s.logger.Warn("reset password: user lookup failed", "email", req.Email, "err", err)
 		return nil
 	}
 	newPassword, err := randstring.GenerateRandomPassword(12)
@@ -127,7 +129,8 @@ func (s *AuthService) ResetPassword(ctx context.Context, req dto.UserResetPasswo
 	if err := s.repo.UpdatePassword(ctx, req.Email, hashPassword, salt); err != nil {
 		return err
 	}
-	log.Printf("Password reset: new password is %s", newPassword)
+	// TODO: add email sending
+	s.logger.Info("password reset", "email", req.Email, "new_password", newPassword)
 	return nil
 }
 

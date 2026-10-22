@@ -11,6 +11,5 @@ func NewLogger() *slog.Logger {
 		Level:     slog.LevelDebug,
 	})
 	logger := slog.New(handler)
-	slog.SetDefault(logger)
 	return logger
 }

@@ -5,6 +5,7 @@ import (
 	"authservice/internal/grpcserver"
 	"context"
 	"errors"
+	"log/slog"
 	"testing"
 
 	"github.com/google/uuid"
@@ -49,6 +50,8 @@ func (m *mockAuthService) ValidateToken(ctx context.Context, token string) (uuid
 
 var errService = errors.New("service failed")
 
+var discardLogger = slog.New(slog.DiscardHandler)
+
 func requireGRPCCode(t *testing.T, err error, want codes.Code) {
 	t.Helper()
 	st, ok := status.FromError(err)
@@ -65,7 +68,7 @@ func TestRegister_Success(t *testing.T) {
 		PhoneNumber: "+79999999999",
 		Password:    "password",
 	}).Return("token-123", nil)
-	server := grpcserver.NewServer(svc)
+	server := grpcserver.NewServer(svc, discardLogger)
 
 	resp, err := server.Register(context.Background(), &authpb.RegisterRequest{
 		Email:     "example@mail.com",
@@ -82,7 +85,7 @@ func TestRegister_Success(t *testing.T) {
 func TestRegister_ServiceError(t *testing.T) {
 	svc := new(mockAuthService)
 	svc.On("Register", mock.Anything, mock.Anything).Return("", errService)
-	server := grpcserver.NewServer(svc)
+	server := grpcserver.NewServer(svc, discardLogger)
 
 	resp, err := server.Register(context.Background(), &authpb.RegisterRequest{})
 	requireGRPCCode(t, err, codes.Internal)
@@ -96,7 +99,7 @@ func TestLogin_Success(t *testing.T) {
 		Email:    "example@mail.com",
 		Password: "password",
 	}).Return("token-123", nil)
-	server := grpcserver.NewServer(svc)
+	server := grpcserver.NewServer(svc, discardLogger)
 
 	resp, err := server.Login(context.Background(), &authpb.LoginRequest{
 		Login:    "example@mail.com",
@@ -110,7 +113,7 @@ func TestLogin_Success(t *testing.T) {
 func TestLogin_ServiceError(t *testing.T) {
 	svc := new(mockAuthService)
 	svc.On("Login", mock.Anything, mock.Anything).Return("", errService)
-	server := grpcserver.NewServer(svc)
+	server := grpcserver.NewServer(svc, discardLogger)
 
 	resp, err := server.Login(context.Background(), &authpb.LoginRequest{})
 	requireGRPCCode(t, err, codes.Unauthenticated)
@@ -125,7 +128,7 @@ func TestChangePassword_Success(t *testing.T) {
 		OldPassword: "old-password",
 		NewPassword: "new-password",
 	}).Return(nil)
-	server := grpcserver.NewServer(svc)
+	server := grpcserver.NewServer(svc, discardLogger)
 
 	resp, err := server.ChangePassword(context.Background(), &authpb.ChangePasswordRequest{
 		Login:       "example@mail.com",
@@ -140,7 +143,7 @@ func TestChangePassword_Success(t *testing.T) {
 func TestChangePassword_ServiceError(t *testing.T) {
 	svc := new(mockAuthService)
 	svc.On("ChangePassword", mock.Anything, mock.Anything).Return(errService)
-	server := grpcserver.NewServer(svc)
+	server := grpcserver.NewServer(svc, discardLogger)
 
 	resp, err := server.ChangePassword(context.Background(), &authpb.ChangePasswordRequest{})
 	requireGRPCCode(t, err, codes.Unauthenticated)
@@ -153,7 +156,7 @@ func TestResetPassword_Success(t *testing.T) {
 	svc.On("ResetPassword", mock.Anything, dto.UserResetPasswordRequest{
 		Email: "example@mail.com",
 	}).Return(nil)
-	server := grpcserver.NewServer(svc)
+	server := grpcserver.NewServer(svc, discardLogger)
 
 	resp, err := server.ResetPassword(context.Background(), &authpb.ResetPasswordRequest{
 		Email: "example@mail.com",
@@ -166,7 +169,7 @@ func TestResetPassword_Success(t *testing.T) {
 func TestResetPassword_ServiceError(t *testing.T) {
 	svc := new(mockAuthService)
 	svc.On("ResetPassword", mock.Anything, mock.Anything).Return(errService)
-	server := grpcserver.NewServer(svc)
+	server := grpcserver.NewServer(svc, discardLogger)
 
 	resp, err := server.ResetPassword(context.Background(), &authpb.ResetPasswordRequest{})
 	requireGRPCCode(t, err, codes.Internal)
@@ -178,7 +181,7 @@ func TestValidateToken_Valid(t *testing.T) {
 	svc := new(mockAuthService)
 	userID := uuid.New()
 	svc.On("ValidateToken", mock.Anything, "token-123").Return(userID, nil)
-	server := grpcserver.NewServer(svc)
+	server := grpcserver.NewServer(svc, discardLogger)
 
 	resp, err := server.ValidateToken(context.Background(), &authpb.ValidateTokenRequest{
 		Token: "token-123",
@@ -192,7 +195,7 @@ func TestValidateToken_Valid(t *testing.T) {
 func TestValidateToken_Invalid(t *testing.T) {
 	svc := new(mockAuthService)
 	svc.On("ValidateToken", mock.Anything, "bad-token").Return(uuid.Nil, errService)
-	server := grpcserver.NewServer(svc)
+	server := grpcserver.NewServer(svc, discardLogger)
 
 	resp, err := server.ValidateToken(context.Background(), &authpb.ValidateTokenRequest{
 		Token: "bad-token",

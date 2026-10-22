@@ -7,9 +7,11 @@ import (
 	"authservice/internal/config"
 	"authservice/internal/database"
 	"authservice/internal/grpcserver"
+	"authservice/internal/logger"
 	"authservice/internal/repository"
 	"authservice/internal/service"
 	"context"
+	"log/slog"
 
 	"github.com/sonofsun61/AuthContract/gen/authpb"
 
@@ -25,6 +27,7 @@ func InitializeApp() *App {
 		ProvideConnString,
 		ProvideJWTSecret,
 		ProvideContext,
+		logger.NewLogger,
 		database.MustConnectToDatabase,
 		repository.NewUserRepository,
 		wire.Bind(new(service.UserRepository), new(*repository.UserRepository)),
@@ -56,9 +59,10 @@ func ProvideGRPCServer(authServer *grpcserver.Server) *grpc.Server {
 	return grpcServer
 }
 
-func ProvideApp(pool *pgxpool.Pool, grpcServer *grpc.Server) *App {
+func ProvideApp(pool *pgxpool.Pool, grpcServer *grpc.Server, logger *slog.Logger) *App {
 	return &App{
 		pool:       pool,
 		grpcServer: grpcServer,
+		logger:     logger,
 	}
 }

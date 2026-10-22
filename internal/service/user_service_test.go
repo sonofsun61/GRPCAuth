@@ -8,6 +8,7 @@ import (
 	"authservice/internal/service"
 	"context"
 	"errors"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -44,6 +45,8 @@ const (
 )
 
 var errDBDown = errors.New("db down")
+
+var discardLogger = slog.New(slog.DiscardHandler)
 var errInvalidCredentials = errors.New("invalid email or password")
 var errUserNotFound = errors.New("failed to find user")
 
@@ -61,7 +64,7 @@ func validRegisterRequest() dto.UserRegisterRequest {
 func TestRegister_RepoError(t *testing.T) {
 	repo := new(mockUserRepo)
 	repo.On("CreateUser", mock.Anything, mock.Anything).Return(uuid.Nil, errDBDown)
-	svc := service.NewAuthService(repo, testSecret)
+	svc := service.NewAuthService(repo, testSecret, discardLogger)
 	req := validRegisterRequest()
 
 	token, err := svc.Register(context.Background(), req)
@@ -81,7 +84,7 @@ func TestRegister_Success(t *testing.T) {
 			u.PasswordHash != req.Password &&
 			hasher.ComparePassword(u.PasswordHash, req.Password, u.PasswordSalt) == nil
 	})).Return(id, nil)
-	svc := service.NewAuthService(repo, testSecret)
+	svc := service.NewAuthService(repo, testSecret, discardLogger)
 
 	token, err := svc.Register(context.Background(), req)
 	assert.NoError(t, err)
@@ -106,7 +109,7 @@ func TestRegister_EmptyFields(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := new(mockUserRepo)
-			svc := service.NewAuthService(repo, testSecret)
+			svc := service.NewAuthService(repo, testSecret, discardLogger)
 			req := validRegisterRequest()
 			tt.modify(&req)
 			token, err := svc.Register(context.Background(), req)
@@ -140,7 +143,7 @@ func TestLogin_Success(t *testing.T) {
 	password := "password"
 	user := newStoreUser(t, password)
 	repo.On("GetUserByEmail", mock.Anything, user.Email).Return(user, nil)
-	svc := service.NewAuthService(repo, testSecret)
+	svc := service.NewAuthService(repo, testSecret, discardLogger)
 	req := dto.UserLoginRequest{
 		Email:    user.Email,
 		Password: password,
@@ -159,7 +162,7 @@ func TestLogin_UserNotFound(t *testing.T) {
 	password := "password"
 	user := newStoreUser(t, password)
 	repo.On("GetUserByEmail", mock.Anything, user.Email).Return(entity.User{}, errUserNotFound)
-	svc := service.NewAuthService(repo, testSecret)
+	svc := service.NewAuthService(repo, testSecret, discardLogger)
 	req := dto.UserLoginRequest{
 		Email:    user.Email,
 		Password: password,
@@ -175,7 +178,7 @@ func TestLogin_WrongPassword(t *testing.T) {
 	password := "password"
 	user := newStoreUser(t, password)
 	repo.On("GetUserByEmail", mock.Anything, user.Email).Return(user, nil)
-	svc := service.NewAuthService(repo, testSecret)
+	svc := service.NewAuthService(repo, testSecret, discardLogger)
 	req := dto.UserLoginRequest{
 		Email:    user.Email,
 		Password: "random-password",
@@ -201,7 +204,7 @@ func TestChangePassword_UserNotFound(t *testing.T) {
 	newPassword := "newPassword"
 	req := newChangePasswordRequest(oldPassword, newPassword)
 	repo.On("GetUserByEmail", mock.Anything, req.Email).Return(entity.User{}, errUserNotFound)
-	svc := service.NewAuthService(repo, testSecret)
+	svc := service.NewAuthService(repo, testSecret, discardLogger)
 	err := svc.ChangePassword(context.Background(), req)
 	require.EqualError(t, err, errInvalidCredentials.Error())
 	repo.AssertNotCalled(t, "UpdatePassword", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
@@ -214,7 +217,7 @@ func TestChangePassword_WrongOldPassword(t *testing.T) {
 	user := newStoreUser(t, oldPassword)
 	req := newChangePasswordRequest("WrongOldPassword", newPassword)
 	repo.On("GetUserByEmail", mock.Anything, user.Email).Return(user, nil)
-	svc := service.NewAuthService(repo, testSecret)
+	svc := service.NewAuthService(repo, testSecret, discardLogger)
 	err := svc.ChangePassword(context.Background(), req)
 	require.EqualError(t, err, errInvalidCredentials.Error())
 	repo.AssertNotCalled(t, "UpdatePassword", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
@@ -228,7 +231,7 @@ func TestChangePassword_UpdateError(t *testing.T) {
 	req := newChangePasswordRequest(oldPassword, newPassword)
 	repo.On("GetUserByEmail", mock.Anything, user.Email).Return(user, nil)
 	repo.On("UpdatePassword", mock.Anything, user.Email, mock.Anything, mock.Anything).Return(errDBDown)
-	svc := service.NewAuthService(repo, testSecret)
+	svc := service.NewAuthService(repo, testSecret, discardLogger)
 	err := svc.ChangePassword(context.Background(), req)
 	require.ErrorIs(t, err, errDBDown)
 	repo.AssertExpectations(t)
@@ -248,7 +251,7 @@ func TestChangePassword_Success(t *testing.T) {
 			gotHash = args.String(2)
 			gotSalt = args.String(3)
 		})
-	svc := service.NewAuthService(repo, testSecret)
+	svc := service.NewAuthService(repo, testSecret, discardLogger)
 	err := svc.ChangePassword(context.Background(), req)
 	require.NoError(t, err)
 	require.NoError(t, hasher.ComparePassword(gotHash, newPassword, gotSalt))
@@ -265,7 +268,7 @@ func TestResetPassword_UserNotFound(t *testing.T) {
 	req := dto.UserResetPasswordRequest{
 		Email: user.Email,
 	}
-	svc := service.NewAuthService(repo, testSecret)
+	svc := service.NewAuthService(repo, testSecret, discardLogger)
 	err := svc.ResetPassword(context.Background(), req)
 	require.NoError(t, err)
 	repo.AssertNotCalled(t, "UpdatePassword", mock.Anything, req.Email, mock.Anything, mock.Anything)
@@ -280,7 +283,7 @@ func TestResetPassword_UpdateError(t *testing.T) {
 	req := dto.UserResetPasswordRequest{
 		Email: user.Email,
 	}
-	svc := service.NewAuthService(repo, testSecret)
+	svc := service.NewAuthService(repo, testSecret, discardLogger)
 	err := svc.ResetPassword(context.Background(), req)
 	require.ErrorIs(t, err, errDBDown)
 	repo.AssertExpectations(t)
@@ -301,7 +304,7 @@ func TestResetPassword_Success(t *testing.T) {
 	req := dto.UserResetPasswordRequest{
 		Email: user.Email,
 	}
-	svc := service.NewAuthService(repo, testSecret)
+	svc := service.NewAuthService(repo, testSecret, discardLogger)
 	err := svc.ResetPassword(context.Background(), req)
 	require.NoError(t, err)
 	require.NotEqual(t, gotSalt, user.PasswordSalt)
