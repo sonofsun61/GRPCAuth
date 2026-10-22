@@ -86,3 +86,17 @@ go run ./cmd/authservice
 ```
 
 Сервис слушает порт `50051`.
+
+## Тесты
+
+Тесты написаны с использованием [testify](https://github.com/stretchr/testify) (`assert`, `require`, `mock`).
+
+```bash
+# unit-тесты (без БД)
+go test -race -cover ./...
+
+# интеграционные тесты репозитория: поднимают PostgreSQL в Docker через testcontainers-go
+go test -tags=integration -cover ./internal/repository/...
+```
+
+Для интеграционных тестов нужен запущенный Docker.
