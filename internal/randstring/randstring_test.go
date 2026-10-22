@@ -34,3 +34,11 @@ func TestGenerateRandomPassword_LengthCheck(t *testing.T) {
 		})
 	}
 }
+
+func TestGenerateRandomPassword_IsUnique(t *testing.T) {
+	password1, err := randstring.GenerateRandomPassword(12)
+	require.NoError(t, err)
+	password2, err := randstring.GenerateRandomPassword(12)
+	require.NoError(t, err)
+	assert.NotEqual(t, password1, password2)
+}
