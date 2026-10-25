@@ -32,10 +32,10 @@ $(MIGRATE):
 	mv $(BIN_DIR)/migrate $(MIGRATE)
 
 migrate-up: $(MIGRATE)
-	$(MIGRATE) -path migrations -database "$(POSTGRES_URL)" up
+	$(MIGRATE) -path migrations -database "$$POSTGRES_URL" up
 
 migrate-down: $(MIGRATE)
-	$(MIGRATE) -path migrations -database "$(POSTGRES_URL)" down 1
+	$(MIGRATE) -path migrations -database "$$POSTGRES_URL" down 1
 
 run: db-up migrate-up
 	go run ./cmd/authservice
