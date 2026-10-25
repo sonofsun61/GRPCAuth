@@ -9,7 +9,7 @@ import (
 )
 
 func TestMustLoadConfig_Success(t *testing.T) {
-	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost:5432/db")
+	t.Setenv("POSTGRES_URL", "postgres://user:pass@localhost:5432/db")
 	t.Setenv("JWT_SECRET", "test-secret")
 
 	cfg := config.MustLoadConfig()
@@ -25,13 +25,13 @@ func TestMustLoadConfig_MissingEnv(t *testing.T) {
 		jwtSecret string
 		wantPanic string
 	}{
-		{"no database url", "", "test-secret", "DATABASE_URL is not set"},
+		{"no database url", "", "test-secret", "POSTGRES_URL is not set"},
 		{"no jwt secret", "postgres://user:pass@localhost:5432/db", "", "JWT_SECRET is not set"},
-		{"nothing set", "", "", "DATABASE_URL is not set"},
+		{"nothing set", "", "", "POSTGRES_URL is not set"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv("DATABASE_URL", tt.dbURL)
+			t.Setenv("POSTGRES_URL", tt.dbURL)
 			t.Setenv("JWT_SECRET", tt.jwtSecret)
 
 			assert.PanicsWithValue(t, tt.wantPanic, func() {
