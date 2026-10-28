@@ -1,4 +1,4 @@
-include .env
+-include .env
 
 export
 
@@ -6,7 +6,7 @@ BIN_DIR := $(CURDIR)/bin
 MIGRATE_VERSION ?= v4.20.1
 MIGRATE := $(BIN_DIR)/migrate-$(MIGRATE_VERSION)
 
-.PHONY: test test-integration lint db-up db-down wire migrate-up migrate-down run
+.PHONY: test test-integration lint db-up db-down wire migrate-up migrate-down run docker-build
 
 test:
 	@go test -race -cover -count=1 ./...
@@ -39,3 +39,6 @@ migrate-down: $(MIGRATE)
 
 run: db-up migrate-up
 	go run ./cmd/authservice
+
+docker-build:
+	@docker build -t grpcauth:dev .
