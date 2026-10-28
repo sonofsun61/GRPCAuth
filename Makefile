@@ -19,7 +19,7 @@ lint:
 	@test -z "$$(gofmt -l .)" || (echo "не отформатированы"; gofmt -l .; exit 1)
 
 db-up:
-	@docker compose up -d
+	@docker compose up -d --wait
 
 db-down:
 	@docker compose down
