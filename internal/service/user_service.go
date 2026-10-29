@@ -3,12 +3,14 @@ package service
 import (
 	"authservice/internal/dto"
 	"authservice/internal/entity"
+	"authservice/internal/events"
 	"authservice/internal/hasher"
 	"authservice/internal/jwtutil"
 	"authservice/internal/randstring"
 	"context"
 	"errors"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -21,15 +23,21 @@ type UserRepository interface {
 	UpdatePassword(ctx context.Context, email, newPasswordHash, newPasswordSalt string) error
 }
 
+type EventPublisher interface {
+	PublishUserRegistered(ctx context.Context, eventInfo events.UserRegistered) error
+}
+
 type AuthService struct {
 	repo      UserRepository
+	publisher EventPublisher
 	jwtSecret string
 	logger    *slog.Logger
 }
 
-func NewAuthService(repo UserRepository, jwtSecret JWTSecret, logger *slog.Logger) *AuthService {
+func NewAuthService(repo UserRepository, publisher EventPublisher, jwtSecret JWTSecret, logger *slog.Logger) *AuthService {
 	return &AuthService{
 		repo:      repo,
+		publisher: publisher,
 		jwtSecret: string(jwtSecret),
 		logger:    logger,
 	}
@@ -60,6 +68,16 @@ func (s *AuthService) Register(ctx context.Context, newUserData dto.UserRegister
 	id, err := s.repo.CreateUser(ctx, req)
 	if err != nil {
 		return "", err
+	}
+	eventInfo := events.UserRegistered{
+		EventID:    uuid.New(),
+		UserID:     id,
+		Email:      req.Email,
+		Name:       req.Name,
+		OccurredAt: time.Now().UTC(),
+	}
+	if err := s.publisher.PublishUserRegistered(ctx, eventInfo); err != nil {
+		s.logger.Warn("failed to publish create user event", "user_id", id, "error", err)
 	}
 	token, err := jwtutil.GenerateToken(id, s.jwtSecret)
 	if err != nil {

@@ -11,6 +11,7 @@ import (
 	"authservice/internal/database"
 	"authservice/internal/grpcserver"
 	"authservice/internal/logger"
+	"authservice/internal/publisher"
 	"authservice/internal/repository"
 	"authservice/internal/service"
 	"context"
@@ -29,12 +30,13 @@ func InitializeApp() *App {
 	connString := ProvideConnString(configConfig)
 	pool := database.MustConnectToDatabase(context, connString)
 	userRepository := repository.NewUserRepository(pool)
+	publisher := ProvidePublisher(configConfig)
 	jwtSecret := ProvideJWTSecret(configConfig)
 	slogLogger := logger.NewLogger()
-	authService := service.NewAuthService(userRepository, jwtSecret, slogLogger)
+	authService := service.NewAuthService(userRepository, publisher, jwtSecret, slogLogger)
 	server := grpcserver.NewServer(authService, slogLogger)
 	grpcServer := ProvideGRPCServer(server)
-	app := ProvideApp(pool, grpcServer, slogLogger)
+	app := ProvideApp(pool, grpcServer, slogLogger, publisher)
 	return app
 }
 
@@ -59,10 +61,15 @@ func ProvideGRPCServer(authServer *grpcserver.Server) *grpc.Server {
 	return grpcServer
 }
 
-func ProvideApp(pool *pgxpool.Pool, grpcServer *grpc.Server, logger2 *slog.Logger) *App {
+func ProvideApp(pool *pgxpool.Pool, grpcServer *grpc.Server, logger2 *slog.Logger, publisher2 *publisher.Publisher) *App {
 	return &App{
 		pool:       pool,
 		grpcServer: grpcServer,
 		logger:     logger2,
+		publisher:  publisher2,
 	}
+}
+
+func ProvidePublisher(cfg *config.Config) *publisher.Publisher {
+	return publisher.NewPublisher(cfg.KafkaBrokers, cfg.UserEventsTopic)
 }

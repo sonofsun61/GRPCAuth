@@ -8,6 +8,7 @@ import (
 	"authservice/internal/database"
 	"authservice/internal/grpcserver"
 	"authservice/internal/logger"
+	"authservice/internal/publisher"
 	"authservice/internal/repository"
 	"authservice/internal/service"
 	"context"
@@ -35,6 +36,8 @@ func InitializeApp() *App {
 		wire.Bind(new(grpcserver.AuthService), new(*service.AuthService)),
 		grpcserver.NewServer,
 		ProvideGRPCServer,
+		wire.Bind(new(service.EventPublisher), new(*publisher.Publisher)),
+		ProvidePublisher,
 		ProvideApp,
 	)
 	return nil
@@ -59,10 +62,15 @@ func ProvideGRPCServer(authServer *grpcserver.Server) *grpc.Server {
 	return grpcServer
 }
 
-func ProvideApp(pool *pgxpool.Pool, grpcServer *grpc.Server, logger *slog.Logger) *App {
+func ProvideApp(pool *pgxpool.Pool, grpcServer *grpc.Server, logger *slog.Logger, publisher *publisher.Publisher) *App {
 	return &App{
 		pool:       pool,
 		grpcServer: grpcServer,
 		logger:     logger,
+		publisher:  publisher,
 	}
+}
+
+func ProvidePublisher(cfg *config.Config) *publisher.Publisher {
+	return publisher.NewPublisher(cfg.KafkaBrokers, cfg.UserEventsTopic)
 }

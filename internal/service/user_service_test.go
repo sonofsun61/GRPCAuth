@@ -3,6 +3,7 @@ package service_test
 import (
 	"authservice/internal/dto"
 	"authservice/internal/entity"
+	"authservice/internal/events"
 	"authservice/internal/hasher"
 	"authservice/internal/jwtutil"
 	"authservice/internal/service"
@@ -23,7 +24,12 @@ type mockUserRepo struct {
 	mock.Mock
 }
 
+type mockEventPublisher struct {
+	mock.Mock
+}
+
 var _ service.UserRepository = (*mockUserRepo)(nil)
+var _ service.EventPublisher = (*mockEventPublisher)(nil)
 
 func (m *mockUserRepo) CreateUser(ctx context.Context, user entity.User) (uuid.UUID, error) {
 	args := m.Called(ctx, user)
@@ -37,6 +43,11 @@ func (m *mockUserRepo) GetUserByEmail(ctx context.Context, email string) (entity
 
 func (m *mockUserRepo) UpdatePassword(ctx context.Context, email, newPasswordHash, newPasswordSalt string) error {
 	args := m.Called(ctx, email, newPasswordHash, newPasswordSalt)
+	return args.Error(0)
+}
+
+func (m *mockEventPublisher) PublishUserRegistered(ctx context.Context, eventInfo events.UserRegistered) error {
+	args := m.Called(ctx, eventInfo)
 	return args.Error(0)
 }
 
@@ -63,18 +74,21 @@ func validRegisterRequest() dto.UserRegisterRequest {
 
 func TestRegister_RepoError(t *testing.T) {
 	repo := new(mockUserRepo)
+	publisher := new(mockEventPublisher)
 	repo.On("CreateUser", mock.Anything, mock.Anything).Return(uuid.Nil, errDBDown)
-	svc := service.NewAuthService(repo, testSecret, discardLogger)
+	svc := service.NewAuthService(repo, publisher, testSecret, discardLogger)
 	req := validRegisterRequest()
 
 	token, err := svc.Register(context.Background(), req)
 	assert.ErrorIs(t, err, errDBDown)
 	assert.Empty(t, token)
 	repo.AssertExpectations(t)
+	publisher.AssertNotCalled(t, "PublishUserRegistered", mock.Anything, mock.Anything)
 }
 
 func TestRegister_Success(t *testing.T) {
 	repo := new(mockUserRepo)
+	publisher := new(mockEventPublisher)
 	id := uuid.New()
 	req := validRegisterRequest()
 	repo.On("CreateUser", mock.Anything, mock.MatchedBy(func(u entity.User) bool {
@@ -84,7 +98,12 @@ func TestRegister_Success(t *testing.T) {
 			u.PasswordHash != req.Password &&
 			hasher.ComparePassword(u.PasswordHash, req.Password, u.PasswordSalt) == nil
 	})).Return(id, nil)
-	svc := service.NewAuthService(repo, testSecret, discardLogger)
+	publisher.On("PublishUserRegistered", mock.Anything, mock.MatchedBy(func(e events.UserRegistered) bool {
+		return e.UserID == id &&
+			e.Email == req.Email &&
+			e.EventID != uuid.Nil
+	})).Return(nil)
+	svc := service.NewAuthService(repo, publisher, testSecret, discardLogger)
 
 	token, err := svc.Register(context.Background(), req)
 	assert.NoError(t, err)
@@ -93,6 +112,24 @@ func TestRegister_Success(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, id, userID)
 	repo.AssertExpectations(t)
+	publisher.AssertExpectations(t)
+}
+
+func TestRegister_PublishError(t *testing.T) {
+	repo := new(mockUserRepo)
+	publisher := new(mockEventPublisher)
+	id := uuid.New()
+	repo.On("CreateUser", mock.Anything, mock.Anything).Return(id, nil)
+	publisher.On("PublishUserRegistered", mock.Anything, mock.Anything).Return(errors.New("kafka down"))
+	svc := service.NewAuthService(repo, publisher, testSecret, discardLogger)
+
+	token, err := svc.Register(context.Background(), validRegisterRequest())
+	require.NoError(t, err)
+	userID, err := jwtutil.ValidateToken(token, testSecret)
+	require.NoError(t, err)
+	assert.Equal(t, id, userID)
+	repo.AssertExpectations(t)
+	publisher.AssertExpectations(t)
 }
 
 func TestRegister_EmptyFields(t *testing.T) {
@@ -109,13 +146,15 @@ func TestRegister_EmptyFields(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := new(mockUserRepo)
-			svc := service.NewAuthService(repo, testSecret, discardLogger)
+			publisher := new(mockEventPublisher)
+			svc := service.NewAuthService(repo, publisher, testSecret, discardLogger)
 			req := validRegisterRequest()
 			tt.modify(&req)
 			token, err := svc.Register(context.Background(), req)
 			assert.Error(t, err)
 			assert.Empty(t, token)
 			repo.AssertNotCalled(t, "CreateUser", mock.Anything, mock.Anything)
+			publisher.AssertNotCalled(t, "PublishUserRegistered", mock.Anything, mock.Anything)
 		})
 	}
 }
@@ -143,7 +182,7 @@ func TestLogin_Success(t *testing.T) {
 	password := "password"
 	user := newStoreUser(t, password)
 	repo.On("GetUserByEmail", mock.Anything, user.Email).Return(user, nil)
-	svc := service.NewAuthService(repo, testSecret, discardLogger)
+	svc := service.NewAuthService(repo, new(mockEventPublisher), testSecret, discardLogger)
 	req := dto.UserLoginRequest{
 		Email:    user.Email,
 		Password: password,
@@ -162,7 +201,7 @@ func TestLogin_UserNotFound(t *testing.T) {
 	password := "password"
 	user := newStoreUser(t, password)
 	repo.On("GetUserByEmail", mock.Anything, user.Email).Return(entity.User{}, errUserNotFound)
-	svc := service.NewAuthService(repo, testSecret, discardLogger)
+	svc := service.NewAuthService(repo, new(mockEventPublisher), testSecret, discardLogger)
 	req := dto.UserLoginRequest{
 		Email:    user.Email,
 		Password: password,
@@ -178,7 +217,7 @@ func TestLogin_WrongPassword(t *testing.T) {
 	password := "password"
 	user := newStoreUser(t, password)
 	repo.On("GetUserByEmail", mock.Anything, user.Email).Return(user, nil)
-	svc := service.NewAuthService(repo, testSecret, discardLogger)
+	svc := service.NewAuthService(repo, new(mockEventPublisher), testSecret, discardLogger)
 	req := dto.UserLoginRequest{
 		Email:    user.Email,
 		Password: "random-password",
@@ -204,7 +243,7 @@ func TestChangePassword_UserNotFound(t *testing.T) {
 	newPassword := "newPassword"
 	req := newChangePasswordRequest(oldPassword, newPassword)
 	repo.On("GetUserByEmail", mock.Anything, req.Email).Return(entity.User{}, errUserNotFound)
-	svc := service.NewAuthService(repo, testSecret, discardLogger)
+	svc := service.NewAuthService(repo, new(mockEventPublisher), testSecret, discardLogger)
 	err := svc.ChangePassword(context.Background(), req)
 	require.EqualError(t, err, errInvalidCredentials.Error())
 	repo.AssertNotCalled(t, "UpdatePassword", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
@@ -217,7 +256,7 @@ func TestChangePassword_WrongOldPassword(t *testing.T) {
 	user := newStoreUser(t, oldPassword)
 	req := newChangePasswordRequest("WrongOldPassword", newPassword)
 	repo.On("GetUserByEmail", mock.Anything, user.Email).Return(user, nil)
-	svc := service.NewAuthService(repo, testSecret, discardLogger)
+	svc := service.NewAuthService(repo, new(mockEventPublisher), testSecret, discardLogger)
 	err := svc.ChangePassword(context.Background(), req)
 	require.EqualError(t, err, errInvalidCredentials.Error())
 	repo.AssertNotCalled(t, "UpdatePassword", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
@@ -231,7 +270,7 @@ func TestChangePassword_UpdateError(t *testing.T) {
 	req := newChangePasswordRequest(oldPassword, newPassword)
 	repo.On("GetUserByEmail", mock.Anything, user.Email).Return(user, nil)
 	repo.On("UpdatePassword", mock.Anything, user.Email, mock.Anything, mock.Anything).Return(errDBDown)
-	svc := service.NewAuthService(repo, testSecret, discardLogger)
+	svc := service.NewAuthService(repo, new(mockEventPublisher), testSecret, discardLogger)
 	err := svc.ChangePassword(context.Background(), req)
 	require.ErrorIs(t, err, errDBDown)
 	repo.AssertExpectations(t)
@@ -251,7 +290,7 @@ func TestChangePassword_Success(t *testing.T) {
 			gotHash = args.String(2)
 			gotSalt = args.String(3)
 		})
-	svc := service.NewAuthService(repo, testSecret, discardLogger)
+	svc := service.NewAuthService(repo, new(mockEventPublisher), testSecret, discardLogger)
 	err := svc.ChangePassword(context.Background(), req)
 	require.NoError(t, err)
 	require.NoError(t, hasher.ComparePassword(gotHash, newPassword, gotSalt))
@@ -268,7 +307,7 @@ func TestResetPassword_UserNotFound(t *testing.T) {
 	req := dto.UserResetPasswordRequest{
 		Email: user.Email,
 	}
-	svc := service.NewAuthService(repo, testSecret, discardLogger)
+	svc := service.NewAuthService(repo, new(mockEventPublisher), testSecret, discardLogger)
 	err := svc.ResetPassword(context.Background(), req)
 	require.NoError(t, err)
 	repo.AssertNotCalled(t, "UpdatePassword", mock.Anything, req.Email, mock.Anything, mock.Anything)
@@ -283,7 +322,7 @@ func TestResetPassword_UpdateError(t *testing.T) {
 	req := dto.UserResetPasswordRequest{
 		Email: user.Email,
 	}
-	svc := service.NewAuthService(repo, testSecret, discardLogger)
+	svc := service.NewAuthService(repo, new(mockEventPublisher), testSecret, discardLogger)
 	err := svc.ResetPassword(context.Background(), req)
 	require.ErrorIs(t, err, errDBDown)
 	repo.AssertExpectations(t)
@@ -304,7 +343,7 @@ func TestResetPassword_Success(t *testing.T) {
 	req := dto.UserResetPasswordRequest{
 		Email: user.Email,
 	}
-	svc := service.NewAuthService(repo, testSecret, discardLogger)
+	svc := service.NewAuthService(repo, new(mockEventPublisher), testSecret, discardLogger)
 	err := svc.ResetPassword(context.Background(), req)
 	require.NoError(t, err)
 	require.NotEqual(t, gotSalt, user.PasswordSalt)

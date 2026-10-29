@@ -1,6 +1,7 @@
 package app
 
 import (
+	"authservice/internal/publisher"
 	"fmt"
 	"log/slog"
 	"net"
@@ -13,10 +14,12 @@ type App struct {
 	pool       *pgxpool.Pool
 	grpcServer *grpc.Server
 	logger     *slog.Logger
+	publisher  *publisher.Publisher
 }
 
 func (a *App) Run() error {
 	defer a.pool.Close()
+	defer a.publisher.Close()
 
 	lis, err := net.Listen("tcp", ":50051")
 	if err != nil {
